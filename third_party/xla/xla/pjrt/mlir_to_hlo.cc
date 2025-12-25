@@ -105,7 +105,7 @@ absl::Status MlirToXlaComputation(
     // TODO(b/420837831): Remove this once we don't need to fall back to GSPMD.
     if (exec_build_options && exec_build_options->use_shardy_partitioner() &&
         xla::sdy::hasGspmdAttrsOrOps(module)) {
-      LOG(WARNING)
+      LOG(FATAL)
           << "Module has GSPMD attrs or ops, but Shardy is enabled. Disabling "
              "Shardy and falling back to using GSPMD propagation.";
       exec_build_options->set_use_shardy_partitioner(false);
