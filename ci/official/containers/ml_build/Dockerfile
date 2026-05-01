@@ -27,16 +27,28 @@ RUN /setup.python.sh python3.14-nogil /builder.requirements.txt
 # TODO(b/376338367): switch to pyenv.
 RUN /setup.python.sh python3.12 /builder.requirements.txt
 
-COPY setup.sources.cudnn.sh /setup.sources.cudnn.sh
 ARG INSTALL_NVIDIA_PACKAGES=false
 ARG NVIDIA_PACKAGES_FILE=cuda12.1_cudnn9.1.packages.txt
 COPY ${NVIDIA_PACKAGES_FILE} /nvidia.packages.txt
+COPY setup.sources.cudnn.sh /setup.sources.cudnn.sh
+
+ARG INSTALL_NON_HERMETIC_TOOLCHAIN=false
+ARG NON_HERMETIC_TOOLCHAIN_PACKAGES_FILE=non_hermetic_toolchain.packages.txt
+COPY ${NON_HERMETIC_TOOLCHAIN_PACKAGES_FILE} /non_hermetic_toolchain.packages.txt
+COPY setup.toolchain.non_hermetic.sh /setup.toolchain.non_hermetic.sh
 
 RUN if [ "${INSTALL_NVIDIA_PACKAGES}" = "true" ]; then \
       echo "Installing Nvidia packages"; \
       /setup.sources.cudnn.sh && /setup.packages.sh /nvidia.packages.txt; \
     else \
-      echo "Nvidia packages are not installed"; \
+      echo "Nvidia packages will not be installed"; \
+    fi
+
+RUN if [ "${INSTALL_NON_HERMETIC_TOOLCHAIN}" = "true" ]; then \
+      echo "Installing non-hermetic toolchain"; \
+      /setup.toolchain.non_hermetic.sh && /setup.packages.sh /non_hermetic_toolchain.packages.txt; \
+    else \
+      echo "Non-hermetic toolchain will not be installed"; \
     fi
 
 # Setup links for TensorFlow to compile.
@@ -46,6 +58,13 @@ RUN if [ "${INSTALL_NVIDIA_PACKAGES}" = "true" ]; then \
 RUN ln -sf /usr/bin/python3.12 /usr/bin/python3
 RUN ln -sf /usr/bin/python3.12 /usr/bin/python
 RUN ln -sf /usr/lib/python3.12 /usr/lib/tf_python
+
+# Set up symlinks for Clang and LLD if using a non-hermetic toolchain.
+RUN if [ "${INSTALL_NON_HERMETIC_TOOLCHAIN}" = "true" ]; then \
+      ln -sf /usr/bin/clang-18 /usr/bin/clang; \
+      ln -sf /usr/bin/clang++-18 /usr/bin/clang++; \
+      ln -sf /usr/bin/lld-18 /usr/bin/lld; \
+    fi
 
 # Link the compat driver to the location if available.
 RUN if [ -e "/usr/local/cuda/compat/libcuda.so.1" ]; then ln -s /usr/local/cuda/compat/libcuda.so.1 /usr/lib/x86_64-linux-gnu/libcuda.so.1; fi
@@ -78,3 +97,9 @@ RUN wget https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.1
 # Don't use the bazel cache when a new docker image is created.
 RUN echo build --action_env=DOCKER_CACHEBUSTER=$(date +%s%N)$RANDOM >> /etc/bazel.bazelrc
 RUN echo build --host_action_env=DOCKER_HOST_CACHEBUSTER=$(date +%s%N)$RANDOM >> /etc/bazel.bazelrc
+
+# Create a non-root (but still sudo-privileged) user for running builds.
+# This is because Bazel's `rules_python` module complains if run as root.
+RUN useradd -m -u 1001 builduser
+RUN echo "builduser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+USER builduser
