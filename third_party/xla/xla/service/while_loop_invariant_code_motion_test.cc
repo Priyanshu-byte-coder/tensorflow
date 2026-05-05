@@ -823,6 +823,42 @@ ENTRY entry {
             "({\"while.5\" {0}}, {\"while.5\" {1}}, {\"while.5#*/c.1\"}, "
             "{\"while.5#*/add.1\"})");
 }
+TEST_F(WhileLoopInvariantCodeMotionTest, HoistsGetRngSeed) {
+  auto m = CreateNewVerifiedModule();
+  auto array_u64 = ShapeUtil::MakeShape(U64, {1});
+  Shape while_shape = ShapeUtil::MakeTupleShape({array_u64, array_u64});
+
+  HloComputation* while_body = [&]() {
+    HloComputation::Builder builder(TestName() + ".while_body");
+    HloInstruction* param = builder.AddInstruction(
+        HloInstruction::CreateParameter(0, while_shape, "param"));
+    HloInstruction* gte_0 = builder.AddInstruction(
+        HloInstruction::CreateGetTupleElement(array_u64, param, 0));
+    HloInstruction* rng_seed =
+        builder.AddInstruction(HloInstruction::CreateCustomCall(
+            ShapeUtil::MakeShape(U64, {}), {}, "GetRngSeed"));
+    HloInstruction* bcast = builder.AddInstruction(
+        HloInstruction::CreateBroadcast(array_u64, rng_seed, {}));
+    HloInstruction* add = builder.AddInstruction(
+        HloInstruction::CreateBinary(array_u64, HloOpcode::kAdd, gte_0, bcast));
+    builder.AddInstruction(HloInstruction::CreateTuple({gte_0, add}));
+    return m->AddEmbeddedComputation(builder.Build());
+  }();
+
+  HloComputation::Builder builder(TestName());
+  auto* init_value = builder.AddInstruction(
+      HloInstruction::CreateParameter(0, while_shape, "init_value"));
+  builder.AddInstruction(HloInstruction::CreateWhile(
+      while_shape, MakeAlwaysTrueComputation(while_shape, m.get()), while_body,
+      init_value));
+  HloComputation* entry_computation = m->AddEntryComputation(builder.Build());
+
+  TF_ASSERT_OK_AND_ASSIGN(bool simplified_loop,
+                          WhileLoopInvariantCodeMotion{}.Run(m.get()));
+  EXPECT_TRUE(simplified_loop);
+
+  EXPECT_THAT(entry_computation->instructions(), Contains(op::CustomCall()));
+}
 
 }  // namespace
 }  // namespace xla

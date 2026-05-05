@@ -925,5 +925,19 @@ TEST_F(HloConstantFoldingTest,
   }
 }
 
+TEST_F(HloConstantFoldingTest, DontFoldGetRngSeed) {
+  const char* const kModuleStr = R"(
+    HloModule test
+    ENTRY entry {
+      ROOT call = u64[] custom-call(), custom_call_target="GetRngSeed"
+    })";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(kModuleStr));
+  HloConstantFolding constant_folding;
+  TF_ASSERT_OK_AND_ASSIGN(bool result,
+                          RunHloPass(&constant_folding, module.get()));
+  EXPECT_FALSE(result);
+}
+
 }  // namespace
 }  // namespace xla
