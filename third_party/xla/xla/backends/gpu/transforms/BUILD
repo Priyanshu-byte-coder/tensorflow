@@ -1635,6 +1635,7 @@ cc_library(
     srcs = ["gemm_fusion.cc"],
     hdrs = ["gemm_fusion.h"],
     deps = [
+        ":bitcast_transforms",
         "//xla:shape_util",
         "//xla:util",
         "//xla:xla_data_proto_cc",
@@ -1643,6 +1644,7 @@ cc_library(
         "//xla/hlo/analysis:symbolic_map",
         "//xla/hlo/ir:hlo",
         "//xla/hlo/pass:hlo_pass",
+        "//xla/hlo/utils:hlo_query",
         "//xla/hlo/utils:hlo_traversal",
         "//xla/service:hlo_module_config",
         "//xla/service:instruction_fusion",
@@ -1664,6 +1666,7 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@tsl//tsl/platform:tensor_float_32_utils",
     ],
@@ -2109,10 +2112,46 @@ xla_cc_test(
 )
 
 cc_library(
+    name = "bitcast_transforms",
+    srcs = ["bitcast_transforms.cc"],
+    hdrs = ["bitcast_transforms.h"],
+    deps = [
+        "//xla:shape_util",
+        "//xla:util",
+        "//xla:xla_data_proto_cc",
+        "//xla:xla_proto_cc",
+        "//xla/hlo/ir:hlo",
+        "//xla/service/gpu:backend_configs_cc",
+        "//xla/tsl/platform:statusor",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@llvm-project//llvm:Support",
+    ],
+)
+
+xla_cc_test(
+    name = "bitcast_transforms_test",
+    srcs = ["bitcast_transforms_test.cc"],
+    deps = [
+        ":bitcast_transforms",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
     name = "hoist_fused_bitcasts",
     srcs = ["hoist_fused_bitcasts.cc"],
     hdrs = ["hoist_fused_bitcasts.h"],
     deps = [
+        ":bitcast_transforms",
         "//xla:shape_util",
         "//xla:util",
         "//xla:xla_data_proto_cc",
@@ -2122,11 +2161,9 @@ cc_library(
         "//xla/hlo/utils:hlo_query",
         "//xla/service:call_graph",
         "//xla/service/gpu:backend_configs_cc",
-        "//xla/service/gpu:matmul_utils",
         "//xla/tsl/platform:errors",
         "//xla/tsl/platform:status_macros",
         "//xla/tsl/platform:statusor",
-        "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/log",
@@ -2157,7 +2194,6 @@ xla_cc_test(
         "//xla/service/gpu:gpu_device_info_for_tests",
         "//xla/stream_executor:device_description",
         "//xla/stream_executor/cuda:cuda_compute_capability",
-        "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/status:status_matchers",
         "@com_google_absl//absl/strings",
