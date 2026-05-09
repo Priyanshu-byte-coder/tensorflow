@@ -85,13 +85,6 @@ else
 fi
 
 if [[ "$TFCI_WHL_IMPORT_TEST_ENABLE" == "1" ]]; then
-  # FIXME: Preventing the error: 
-  #   CUDA Runtime error: cudaErrorInsufficientDriver: 
-  #     CUDA driver version is insufficient for CUDA runtime version
-  if [[ ! "$TFCI" =~ "rbe" ]]; then
-    export CUDA_VISIBLE_DEVICES="-1"
-  fi
-
   "$python" -c '
 import tensorflow as tf
 t1=tf.constant([1,2,3,4])

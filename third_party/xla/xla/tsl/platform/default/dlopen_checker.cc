@@ -36,6 +36,27 @@ absl::Status TryDlopenCUDALibraries() {
       !cufft_status.status().ok() || !cusolver_status.status().ok() ||
       !cusparse_status.status().ok() || !cudnn_status.status().ok() ||
       !cublaslt_status.status().ok()) {
+    if (!cudart_status.status().ok()) {
+      LOG(WARNING) << cudart_status.status().message();
+    }
+    if (!cublas_status.status().ok()) {
+      LOG(WARNING) << cublas_status.status().message();
+    }
+    if (!cublaslt_status.status().ok()) {
+      LOG(WARNING) << cublaslt_status.status().message();
+    }
+    if (!cufft_status.status().ok()) {
+      LOG(WARNING) << cufft_status.status().message();
+    }
+    if (!cusolver_status.status().ok()) {
+      LOG(WARNING) << cusolver_status.status().message();
+    }
+    if (!cusparse_status.status().ok()) {
+      LOG(WARNING) << cusparse_status.status().message();
+    }
+    if (!cudnn_status.status().ok()) {
+      LOG(WARNING) << cudnn_status.status().message();
+    }
     return absl::Status(absl::StatusCode::kInternal,
                         absl::StrCat("Cannot dlopen all CUDA libraries."));
   } else {
@@ -58,6 +79,12 @@ absl::Status TryDlopenTensorRTLibraries() {
   auto nvinfer_status = GetNvInferDsoHandle();
   auto nvinferplugin_status = GetNvInferPluginDsoHandle();
   if (!nvinfer_status.status().ok() || !nvinferplugin_status.status().ok()) {
+    if (!nvinfer_status.status().ok()) {
+      LOG(WARNING) << nvinfer_status.status().message();
+    }
+    if (!nvinferplugin_status.status().ok()) {
+      LOG(WARNING) << nvinferplugin_status.status().message();
+    }
     return absl::InternalError("Cannot dlopen all TensorRT libraries.");
   } else {
     return absl::OkStatus();
