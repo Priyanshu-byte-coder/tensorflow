@@ -117,8 +117,5 @@ bzl_library(
     name = "build_defs_bzl",
     srcs = ["build_defs.bzl"],
     visibility = ["//visibility:private"],
-    deps = [
-        "//xla/tsl:package_groups_bzl",
-        "//xla/tsl/platform:rules_cc_bzl",
-    ],
+    deps = ["//xla/tsl:package_groups_bzl"],
 )
