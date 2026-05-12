@@ -218,6 +218,11 @@ HloInstruction* FindInstruction(const HloComputation* computation,
 // changes tiling. This is handled by the emitters and effectively are no-ops.
 bool IsChangeTilingCopyFusion(const HloInstruction* instr);
 
+// Returns whether the instruction is a standard forward associative scan:
+// single input and init, and a (output, carry) result tuple where all carry
+// users are dead.
+bool IsStandardAssociativeScan(const HloInstruction* instruction);
+
 }  // namespace hlo_query
 }  // namespace xla
 
