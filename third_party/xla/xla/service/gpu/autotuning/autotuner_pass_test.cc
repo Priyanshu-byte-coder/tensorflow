@@ -32,6 +32,8 @@ limitations under the License.
 #include "xla/backends/autotuner/codegen_backend.h"
 #include "xla/backends/autotuner/profiler.h"
 #include "xla/backends/gpu/autotuner/cublas.h"
+#include "xla/hlo/analysis/alias_info.h"
+#include "xla/hlo/analysis/symbolic_expr.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/hlo/ir/hlo_opcode.h"
@@ -494,6 +496,47 @@ TEST_F(AutotunerFlagsTest, DeterministicAutotuningSetsSelectFirstConfig) {
   debug_options.set_xla_gpu_deterministic_ops(false);
   debug_options.set_xla_gpu_exclude_nondeterministic_ops(true);
   EXPECT_EQ(GetAutotuneConfig(debug_options).select_first_config, true);
+}
+
+TEST_F(AutotunerPassTest, DeterministicOpsDisablesTritonBackend) {
+  mlir::MLIRContext mlir_context;
+  xla::RegisterSymbolicExprStorage(&mlir_context);
+  AliasInfo alias_info;
+  GpuCompiler::GpuTargetConfig target_config(stream_executor_);
+
+  {
+    DebugOptions debug_options = GetDebugOptionsForTest();
+    debug_options.set_xla_gpu_deterministic_ops(true);
+
+    TF_ASSERT_OK_AND_ASSIGN(
+        std::vector<std::unique_ptr<CodegenBackend>> backends,
+        compiler_.GetAutotunerBackends(stream_executor_, allocator_.get(),
+                                       &target_config, &alias_info,
+                                       debug_options, &mlir_context));
+
+    for (const auto& backend : backends) {
+      EXPECT_NE(backend->backend(), autotuner::Backend::TRITON);
+    }
+  }
+  {
+    DebugOptions debug_options = GetDebugOptionsForTest();
+    debug_options.set_xla_gpu_deterministic_ops(false);
+
+    TF_ASSERT_OK_AND_ASSIGN(
+        std::vector<std::unique_ptr<CodegenBackend>> backends,
+        compiler_.GetAutotunerBackends(stream_executor_, allocator_.get(),
+                                       &target_config, &alias_info,
+                                       debug_options, &mlir_context));
+
+    bool found_triton = false;
+    for (const auto& backend : backends) {
+      if (backend->backend() == autotuner::Backend::TRITON) {
+        found_triton = true;
+        break;
+      }
+    }
+    EXPECT_TRUE(found_triton);
+  }
 }
 
 }  // namespace

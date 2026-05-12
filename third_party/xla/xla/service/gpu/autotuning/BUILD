@@ -36,6 +36,8 @@ xla_test(
         "//xla/backends/autotuner:codegen_backend",
         "//xla/backends/autotuner:profiler",
         "//xla/backends/gpu/autotuner:cublas",
+        "//xla/hlo/analysis:alias_info",
+        "//xla/hlo/analysis:symbolic_map",
         "//xla/hlo/ir:hlo",
         "//xla/hlo/testlib:hlo_hardware_independent_test_base",
         "//xla/service:platform_util",

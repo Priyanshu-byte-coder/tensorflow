@@ -3490,6 +3490,10 @@ GpuCompiler::GetAutotunerBackends(
     disabled_autotune_backends.push_back(autotuner::Backend::HIPBLASLT_FISSION);
   }
 
+  if (debug_options.xla_gpu_deterministic_ops()) {
+    disabled_autotune_backends.push_back(autotuner::Backend::TRITON);
+  }
+
   if (!debug_options.xla_gpu_enable_cublaslt()) {
     disabled_autotune_backends.push_back(autotuner::Backend::CUBLASLT);
     disabled_autotune_backends.push_back(autotuner::Backend::CUBLASLT_FISSION);
