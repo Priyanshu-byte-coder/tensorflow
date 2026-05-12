@@ -71,6 +71,7 @@ limitations under the License.
 #include "xla/service/host_offload_utils.h"
 #include "xla/service/memory_annotations.h"
 #include "xla/service/pattern_matcher.h"
+#include "xla/service/scatter_simplifier.h"
 #include "xla/service/shape_inference.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
@@ -9469,6 +9470,79 @@ bool IsPermutationOfIota(absl::Span<const int64_t> elems) {
 
 absl::Status AlgebraicSimplifierVisitor::HandleTranspose(
     HloInstruction* transpose) {
+  // Two options for making changes(going with option 1)
+  // 1) Add code here - simple and avoid recompilation of header files use
+  // 2) Add code in a helper method - requires changing header files use
+
+  // Check if option to fold transpose is enabled
+  if (options_.enable_fold_transpose_into_scatter()) {
+    // retrieve operands
+    HloInstruction* operand = transpose->mutable_operand(0);
+
+    // and if the upstream instruction is a scatter operation enum
+    if (operand->opcode() == HloOpcode::kScatter) {
+      // Cast generic HLO scatter instruction to simplified HLO scatter
+      // necesary to access scatter specific methods and properties
+      auto* scatter = Cast<HloScatterInstruction>(operand);
+
+      // only working for single base tensor and simplified scatter operation
+      if (scatter->scatter_operand_count() == 1 &&
+          xla::ScatterSimplifier::IsSimplifiedScatter(scatter)) {
+        // new shape
+        absl::Span<const int64_t> P_T = transpose->dimensions();
+        std::vector<int64_t> P_T_inv = InversePermutation(P_T);
+
+        // Step 1 : Transpose base operand
+        // if filled with zeros - no-op, check SimplifyTransposeOfBroadcast
+        // Further passes should remove with compile-time constant
+        HloInstruction* scatter_operand = scatter->scatter_operands()[0];
+        HloInstruction* transposed_operand =
+            transpose->AddInstruction(HloInstruction::CreateTranspose(
+                transpose->shape(), scatter_operand, P_T));
+
+        // Step 2 : Injects a new Transpose instruction for scatter update
+        // scatter can happen for multiple tensors, [0] - only first one for now
+        HloInstruction* scatter_update = scatter->scatter_updates()[0];
+        int64_t update_rank = scatter_update->shape().dimensions().size();
+        // constructing permutation array to temporarily store permutation
+        std::vector<int64_t> P_U(update_rank);
+        P_U[0] = 0;  // Preserve the original dimension, no change
+        for (int i = 1; i < update_rank; ++i) {
+          // connect idx to dim by +1
+          P_U[i] = P_T[i - 1] + 1;
+        }
+        // Modify data flow by injecting new instruction for scatter update
+        Shape new_update_shape =
+            ShapeUtil::PermuteDimensions(P_U, scatter_update->shape());
+        HloInstruction* transposed_update =
+            transpose->AddInstruction(HloInstruction::CreateTranspose(
+                new_update_shape, scatter_update, P_U));
+
+        // Create new metadata as scatter updates are shuffled
+        const ScatterDimensionNumbers& old_dnums =
+            scatter->scatter_dimension_numbers();
+        ScatterDimensionNumbers new_dnums = old_dnums;
+        new_dnums.clear_scatter_dims_to_operand_dims();
+        for (int64_t dim : old_dnums.scatter_dims_to_operand_dims()) {
+          new_dnums.add_scatter_dims_to_operand_dims(P_T_inv[dim]);
+        }
+
+        // Step 3 : Create new scatter nodes
+        std::vector<HloInstruction*> new_operands = {transposed_operand};
+        std::vector<HloInstruction*> new_updates = {transposed_update};
+        std::unique_ptr<HloInstruction> new_scatter =
+            HloInstruction::CreateScatter(
+                transpose->shape(), new_operands, scatter->scatter_indices(),
+                new_updates, scatter->to_apply(), new_dnums,
+                scatter->indices_are_sorted(), scatter->unique_indices());
+
+        TF_RETURN_IF_ERROR(
+            ReplaceWithNewInstruction(transpose, std::move(new_scatter)));
+        return absl::OkStatus();
+      }
+    }  // check if input op is a scatter
+  }  // fold transpose into scatter option
+
   auto operand = transpose->mutable_operand(0);
   if (std::is_sorted(transpose->dimensions().begin(),
                      transpose->dimensions().end())) {

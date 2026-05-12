@@ -383,6 +383,14 @@ class AlgebraicSimplifierOptions {
     enable_hoist_transpose_of_reshape_ = value;
   }
 
+  bool enable_fold_transpose_into_scatter() const {
+    return enable_fold_transpose_into_scatter_;
+  }
+
+  void set_enable_fold_transpose_into_scatter(bool value) {
+    enable_fold_transpose_into_scatter_ = value;
+  }
+
  private:
   // Metadata struct can be used to store any metadata information encapsulated
   // with the AlgebraicSimplifierOptions that can be later used in an
@@ -432,6 +440,7 @@ class AlgebraicSimplifierOptions {
   bool rewrite_no_op_bitcast_convert_to_bitcast_{false};
   bool enable_conditional_simplification_{false};
   bool enable_hoist_transpose_of_reshape_{false};
+  bool enable_fold_transpose_into_scatter_{true};
   Metadata metadata_;
 };
 
