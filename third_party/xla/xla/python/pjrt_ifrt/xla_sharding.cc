@@ -106,6 +106,13 @@ MemoryKind CanonicalizeMemoryKindWithDevices(const MemoryKind& memory_kind,
 std::unique_ptr<HloSharding> HloSharding::Create(
     DeviceListRef devices, MemoryKind memory_kind,
     xla::HloSharding xla_hlo_sharding) {
+  if (xla_hlo_sharding.TotalNumTiles() != devices->size()) {
+    return absl::InvalidArgumentError(
+        absl::StrFormat("sharding's tile count and device count does not "
+                        "match: %d vs. %d; sharding=%s",
+                        xla_hlo_sharding.TotalNumTiles(), devices->size(),
+                        xla_hlo_sharding.ToString()));
+  }
   memory_kind = CanonicalizeMemoryKindWithDevices(memory_kind, devices);
   return std::unique_ptr<HloSharding>(new HloSharding(
       std::move(devices), memory_kind, std::move(xla_hlo_sharding)));
@@ -124,29 +131,24 @@ HloSharding::HloSharding(DeviceListRef devices, MemoryKind memory_kind,
       xla_hlo_sharding_.IsReplicated() ||
       ((xla_hlo_sharding_.IsTiled() || xla_hlo_sharding_.IsSingleDevice()) &&
        devices_->size() == 1);
+  if (xla_hlo_sharding_.IsTiled()) {
+    tile_information_.emplace(TileInformation(
+        /*tiled_data_rank=*/xla_hlo_sharding_.TiledDataRank(),
+        /*dimensions=*/xla_hlo_sharding_.dimensions()));
+  }
 }
 
 absl::StatusOr<Shape> HloSharding::GetShardShape(const Shape& shape) const {
-  if (xla_hlo_sharding_.IsReplicatedOrSingleDevice() ||
-      xla_hlo_sharding_.IsManual() || xla_hlo_sharding_.IsUnreduced() ||
-      xla_hlo_sharding_.IsUnknown()) {
+  if (!tile_information_.has_value()) {
     return shape;
   }
-  if (xla_hlo_sharding_.TotalNumTiles() != devices_->size()) {
-    return absl::InvalidArgumentError(
-        absl::StrFormat("sharding's tile count and device count does not "
-                        "match: %d vs. %d; shape=%v, sharding=%s",
-                        xla_hlo_sharding_.TotalNumTiles(), devices_->size(),
-                        shape, xla_hlo_sharding_.ToString()));
-  }
-  if (shape.dims().size() != xla_hlo_sharding_.TiledDataRank()) {
+  if (shape.dims().size() != tile_information_->tiled_data_rank) {
     return InvalidArgument(
         "Numbers of dimensions don't match. From Shape %d vs from "
         "HloSharding %d",
-        shape.dims().size(), xla_hlo_sharding_.TiledDataRank());
+        shape.dims().size(), tile_information_->tiled_data_rank);
   }
-  const absl::Span<const int64_t> sharding_dims =
-      xla_hlo_sharding_.dimensions();
+  const absl::Span<const int64_t> sharding_dims = tile_information_->dimensions;
   Shape::Dimensions tile_shape;
   tile_shape.reserve(shape.dims().size());
   for (int64_t i = 0; i < shape.dims().size(); ++i) {
